@@ -1,2 +1,15 @@
 fileFormatVersion: 2
 guid: 255c2a4d026b6ae45941c705023c8398
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - bombPrefab: {instanceID: 0}
+  - explosionPrefab: {instanceID: 0}
+  - destructibleTiles: {instanceID: 0}
+  - destructiblePrefab: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

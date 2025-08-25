@@ -1,6 +1,5 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.UIElements;
 using UnityEngine.Tilemaps;
 
 public class BombController : MonoBehaviour
@@ -14,15 +13,15 @@ public class BombController : MonoBehaviour
 
     [Header("Explosion")]
     public Explosion explosionPrefab;
-    public LayerMask explosionLayerMask;
     public float explosionDuration = 1f;
     public int explosionRadius = 1;
 
+    [Header("Collision Masks")]
+    // blockingLayerMask: Solid walls or anything that should STOP the blast
+    public LayerMask blockingLayerMask;
+
     [Header("Destructible")]
-    public Tilemap destructibleTiles;
-    public Destructible destructiblePrefab;
-
-
+    public DestructibleManager destructibleManager;
 
     private void OnEnable()
     {
@@ -48,60 +47,60 @@ public class BombController : MonoBehaviour
 
         yield return new WaitForSeconds(bombFuseTime);
 
+        // Snap again (in case the bomb moved slightly)
         position = bomb.transform.position;
         position.x = Mathf.Round(position.x);
         position.y = Mathf.Round(position.y);
 
-        Explosion explosion = Instantiate(explosionPrefab, position, Quaternion.identity);
-        explosion.setActiveRenderer(explosion.start);
-        explosion.DestroyAfter(explosionDuration);
+        // Center explosion
+        Explosion center = Instantiate(explosionPrefab, position, Quaternion.identity);
+        center.setActiveRenderer(center.start);
+        center.DestroyAfter(explosionDuration);
 
-        Explode(position, Vector2.up, explosionRadius);
-        Explode(position, Vector2.down, explosionRadius);
-        Explode(position, Vector2.left, explosionRadius);
-        Explode(position, Vector2.right, explosionRadius);
+        // Spread in 4 directions
+        ExplodeLine(position, Vector2.up, explosionRadius);
+        ExplodeLine(position, Vector2.down, explosionRadius);
+        ExplodeLine(position, Vector2.left, explosionRadius);
+        ExplodeLine(position, Vector2.right, explosionRadius);
 
         Destroy(bomb);
         bombsRemaining++;
-
     }
 
-    private void Explode(Vector2 position, Vector2 direction, int lenght)
+    // Walk step-by-step and handle blocking vs. destructible separately
+    private void ExplodeLine(Vector2 origin, Vector2 direction, int length)
     {
-        if (lenght <= 0)
+        for (int i = 1; i <= length; i++)
         {
-            return;
+            Vector2 pos = origin + direction * i;
+
+            // 1) If we hit a blocking collider, stop the propagation in this direction
+            //    (size 1x1 assumes your tile cell size is 1; adjust if needed)
+            if (Physics2D.OverlapBox(pos, Vector2.one * 0.5f, 0f, blockingLayerMask))
+                break;
+
+            // 2) Spawn explosion segment
+            Explosion segment = Instantiate(explosionPrefab, pos, Quaternion.identity);
+            segment.setActiveRenderer(i < length ? segment.middle : segment.end);
+            segment.SetDirection(direction);
+            segment.DestroyAfter(explosionDuration);
+
+            // 3) Clear destructible tile at this cell (if there is one) and KEEP GOING
+            ClearDestructible(pos);
         }
-
-        position += direction;
-
-        if (Physics2D.OverlapBox(position, Vector2.one / 2f, 0f, explosionLayerMask))
-        {
-            ClearDestructible(position);
-            return;
-        }
-
-        Explosion explosion = Instantiate(explosionPrefab, position, Quaternion.identity);
-        explosion.setActiveRenderer(lenght > 1 ? explosion.middle : explosion.end);
-        explosion.SetDirection(direction);
-        explosion.DestroyAfter(explosionDuration);
-
-        Explode(position, direction, lenght-1);
     }
 
     private void ClearDestructible(Vector2 position)
     {
-        Vector3Int cell = destructibleTiles.WorldToCell(position);
-        TileBase tile = destructibleTiles.GetTile(cell);
-
-        if (tile != null)
+        // Deal 1 damage to any block type at this position; keep ray going regardless.
+        if (destructibleManager != null)
         {
-            Instantiate(destructiblePrefab, position, Quaternion.identity);
-            destructibleTiles.SetTile(cell, null);
+            destructibleManager.DamageAtWorldPosition(position, 1);
         }
     }
 
-        private void OnTriggerExit2D(Collider2D other)
+    // Let player walk off the bomb before it becomes solid
+    private void OnTriggerExit2D(Collider2D other)
     {
         if (other.gameObject.layer == LayerMask.NameToLayer("Bomb"))
         {
